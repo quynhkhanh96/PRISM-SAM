@@ -9,5 +9,5 @@ train:
 benchmark:
   tau: 0.35
   N: 100
-  # {seed} and any key of local_paths.yaml are substituted
-  fewshot: "{legacy_och_dir}/fewshot_data/ochuman_few-shot_seed{seed}.json"
+  # few-shot file default: {results_root}/benchmarks/och/train/tau035/s{seed}/fewshot_N100.json
+  # (populated by scripts/batch0_och.py from the pre-revision fewshot_data/)

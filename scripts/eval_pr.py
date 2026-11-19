@@ -4,8 +4,7 @@ Prompt-robustness (PR) evaluation on OCHuman, with per-instance output.
 Three ways to specify the model (exactly one):
 
   New experiment (config.json + trainable-only ckpt):
-    python scripts/eval_pr.py --exp_dir <results>/<exp_name> --train_seed 0 \
-        --test_file <benchmarks>/och/test/test_s0.json --test_seed 0
+    python scripts/eval_pr.py --exp_dir <results>/<exp_name> --train_seed 0 --test_seed 0
     -> writes <exp_dir>/s0/eval/pr__och-test_s0.{instances,prompts}.parquet
 
   Legacy checkpoint (pre-revision full state_dict, Batch 0 re-dumps):
@@ -15,9 +14,11 @@ Three ways to specify the model (exactly one):
         --test_file <legacy_och_dir>/benchmark_data/ochuman_test_seed0.json --test_seed 0 \
         --out_dir <results>/<canonical_name>/s0/eval
 
-  Zero-shot baseline:
-    python scripts/eval_pr.py --zs sam1 --test_file ... --test_seed 0 \
-        --out_dir <results>/zs__sam1/s0/eval
+  Zero-shot baseline (folder with config.json whose adapt is null, e.g. zs__sam1):
+    python scripts/eval_pr.py --exp_dir <results>/zs__sam1 --test_seed 0
+  or ad hoc:  --zs sam1 --test_seed 0 --method zs__sam1 --out_dir ...
+
+--test_file defaults to <results_root>/benchmarks/och/test/test_s{test_seed}.json
 
 Metric constants are those of the pre-revision test.py.
 """
@@ -36,6 +37,7 @@ import torch  # noqa: E402
 from tqdm import tqdm  # noqa: E402
 
 from prismsam import paths  # noqa: E402
+from prismsam.config import test_path  # noqa: E402
 from prismsam.datasets import och  # noqa: E402
 from prismsam.metrics import pr_instance_values  # noqa: E402
 from prismsam.models import build_model, load_finetuned, legacy_adapt_cfg  # noqa: E402
@@ -72,7 +74,8 @@ def get_args():
     src.add_argument("--legacy_ckpt")
     src.add_argument("--zs", choices=["sam1"])
     p.add_argument("--train_seed", type=int, default=-1)
-    p.add_argument("--test_file", required=True)
+    p.add_argument("--test_file", default=None,
+                   help="default: <results_root>/benchmarks/och/test/test_s{test_seed}.json")
     p.add_argument("--test_seed", type=int, required=True)
     p.add_argument("--bench", default=None, help="default: och-test_s{test_seed}")
     p.add_argument("--out_dir", default=None)
@@ -90,15 +93,19 @@ def get_args():
 
 
 def resolve(args):
-    """-> (exp_cfg, ckpt_path or None, method, out_dir)"""
+    """-> (exp_cfg, ckpt_path or None, method, out_dir); sets args.train_seed=-1 for zero-shot."""
     if args.exp_dir:
         with open(os.path.join(args.exp_dir, "config.json")) as f:
             cfg = json.load(f)
+        method = args.method or cfg.get("exp_name", os.path.basename(os.path.normpath(args.exp_dir)))
+        if cfg.get("adapt") is None:                      # zero-shot baseline folder
+            args.train_seed = -1
+            sdir = os.path.join(args.exp_dir, f"s{args.test_seed}")
+            return cfg, None, method, args.out_dir or os.path.join(sdir, "eval")
         if args.train_seed < 0:
             raise ValueError("--train_seed is required with --exp_dir")
         sdir = os.path.join(args.exp_dir, f"s{args.train_seed}")
-        return (cfg, os.path.join(sdir, "ckpt", "final.pth"),
-                args.method or cfg.get("exp_name", os.path.basename(os.path.normpath(args.exp_dir))),
+        return (cfg, os.path.join(sdir, "ckpt", "final.pth"), method,
                 args.out_dir or os.path.join(sdir, "eval"))
     if args.out_dir is None or args.method is None:
         raise ValueError("--out_dir and --method are required for --legacy_ckpt / --zs")
@@ -109,6 +116,7 @@ def resolve(args):
                "adapt": legacy_adapt_cfg(args.legacy_mode, args.scope, args.proj,
                                          args.rank, args.alpha)}
         return cfg, args.legacy_ckpt, args.method, args.out_dir
+    args.train_seed = -1
     cfg = {"backbone": "sam1", "model_type": args.model_type, "adapt": None}
     return cfg, None, args.method, args.out_dir
 
@@ -116,6 +124,8 @@ def resolve(args):
 def main():
     args = get_args()
     cfg, ckpt, method, out_dir = resolve(args)
+    if args.test_file is None:
+        args.test_file = test_path(och.DATASET, args.test_seed)
     bench = args.bench or f"och-test_s{args.test_seed}"
 
     model = build_model(cfg, sam_checkpoint=paths.sam1_checkpoint(cfg.get("model_type", "vit_l")))

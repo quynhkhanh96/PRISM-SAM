@@ -48,15 +48,7 @@ from prismsam.augment import SegmentationAugmentor, collate_fn  # noqa: E402
 from prismsam.datasets import och  # noqa: E402
 from prismsam.losses import SAMMultimaskLoss  # noqa: E402
 from prismsam.models import build_model, save_trainable  # noqa: E402
-from prismsam.variants import VARIANTS, variant_name  # noqa: E402
-
-TRAIN_DEFAULTS = {
-    "lr": 1e-4, "total_steps": 5000, "batch_instances": 2, "K": 3,
-    "weight_decay": 0.0, "max_grad_norm": 1.0, "amp": True,
-    "focal_weight": 1.0, "dice_weight": 1.0, "score_weight": 1.0,
-    "global_seed": 42,
-}
-
+from prismsam.config import resolve_config, fewshot_path  # noqa: E402
 
 # ------------------------------------------------------------------ helpers
 
@@ -67,15 +59,6 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-
-def fmt_lr(lr):
-    m, e = f"{lr:.0e}".split("e")
-    return f"{m}e{int(e)}"            # 1e-4, 3e-5
-
-
-def fmt_tau(tau):
-    return f"{int(round(tau * 100)):03d}"   # 0.35 -> 035
 
 
 def md5(path):
@@ -95,44 +78,6 @@ def git_hash():
         return "unknown"
 
 
-def resolve_config(raw):
-    """yaml -> fully explicit config (what config.json stores)."""
-    cfg = {"data": raw.get("data", "och"), "backbone": raw.get("backbone", "sam1"),
-           "model_type": raw.get("model_type", "vit_l")}
-    if cfg["data"] != "och":
-        raise NotImplementedError("only data='och' is wired in this script")
-    if "variant" in raw:
-        if "adapt" in raw:
-            raise ValueError("give either 'variant' or 'adapt', not both")
-        cfg["variant"] = raw["variant"]
-        cfg["adapt"] = json.loads(json.dumps(VARIANTS[raw["variant"]]))
-    else:
-        cfg["adapt"] = raw["adapt"]
-    adapt.validate_adapt_cfg(cfg["adapt"])
-
-    t = dict(TRAIN_DEFAULTS)
-    unknown = set(raw.get("train", {})) - set(t)
-    if unknown:
-        raise ValueError(f"unknown train keys: {unknown}")
-    t.update(raw.get("train", {}))
-    t["lr"] = float(t["lr"])
-    cfg["train"] = t
-
-    b = raw["benchmark"]
-    cfg["benchmark"] = {"tau": float(b["tau"]), "N": int(b["N"]), "fewshot": b["fewshot"]}
-
-    cfg["exp_name"] = raw.get("exp_name") or "__".join([
-        cfg["data"], variant_name(cfg["adapt"]), f"lr{fmt_lr(t['lr'])}",
-        f"tau{fmt_tau(cfg['benchmark']['tau'])}-N{cfg['benchmark']['N']}",
-        f"steps{t['total_steps']}"])
-    return cfg
-
-
-def fewshot_path(cfg, seed):
-    keys = dict(paths._load())
-    return cfg["benchmark"]["fewshot"].format(seed=seed, **keys)
-
-
 # --------------------------------------------------------------------- main
 
 def main():
@@ -145,6 +90,8 @@ def main():
 
     with open(args.config) as f:
         cfg = resolve_config(yaml.safe_load(f))
+    if cfg["data"] != "och":
+        raise NotImplementedError("only data='och' is wired in this script")
     t = cfg["train"]
 
     exp_dir = os.path.join(paths.get("results_root"), "results", cfg["exp_name"])
@@ -159,7 +106,9 @@ def main():
         with open(cfg_path) as f:
             old = json.load(f)
         if old != cfg:
-            raise RuntimeError(f"{cfg_path} differs from the resolved config of this run")
+            hint = (" (folder holds re-registered pre-revision checkpoints: never train into it)"
+                    if "legacy" in old else "")
+            raise RuntimeError(f"{cfg_path} differs from the resolved config of this run{hint}")
     else:
         with open(cfg_path, "w") as f:
             json.dump(cfg, f, indent=2)
