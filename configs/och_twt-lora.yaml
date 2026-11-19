@@ -1,0 +1,13 @@
+# PRISM-SAM main recipe (= pre-revision OCH-scopefull-projqkvo-r8-alpha8-...-ep100-shots100-fixedsched)
+data: och
+backbone: sam1
+model_type: vit_l
+variant: twt-lora            # see prismsam/variants.py
+train:
+  lr: 1.0e-4
+  total_steps: 5000          # N=100, batch 2 -> 50 steps/epoch -> 100 epochs
+benchmark:
+  tau: 0.35
+  N: 100
+  # {seed} and any key of local_paths.yaml are substituted
+  fewshot: "{legacy_och_dir}/fewshot_data/ochuman_few-shot_seed{seed}.json"
