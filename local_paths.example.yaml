@@ -1,0 +1,4 @@
+# Copy to local_paths.yaml (git-ignored) and edit per machine.
+ochuman_root: /path/to/your/OCHuman            # contains images/, ochuman.json
+sam_ckpt_dir: /path/to/checkpoints             # sam_vit_l_0b3195.pth, ...
+results_root: /path/to/save/results            # benchmarks/, results/, analysis/

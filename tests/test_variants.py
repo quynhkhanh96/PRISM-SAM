@@ -16,6 +16,7 @@ Pre-flight checks for the R1/R5 variants. Run BEFORE launching any training:
                one variant refuses to load into another; a legacy full
                state_dict of the pre-revision PRISM-SAM loads strictly into
                the new 'twt-lora' variant.
+5. qkv         each q/k/v adapter of LoRAFusedQKV writes only its own slice.
 
 Random-init SAM is used (no checkpoint needed): these are structural tests.
 ViT-L forward at 1024 px needs > 8 GB RAM on CPU (global-attention maps);
@@ -194,13 +195,31 @@ def test_checkpoints(base):
     print("  OK  legacy full state_dict -> twt-lora (strict)")
 
 
+def test_fused_qkv_order():
+    """Adapter i of LoRAFusedQKV must only touch slice i of [q | k | v]."""
+    print("\n[5] LoRAFusedQKV slice order")
+    torch.manual_seed(0)
+    dim = 16
+    base = torch.nn.Linear(dim, 3 * dim)
+    x = torch.randn(2, 5, 5, dim)                    # (B, H, W, C) as in SAM's ViT
+    for i, name in enumerate("qkv"):
+        m = LoRAFusedQKV(copy.deepcopy(base), rank=4, alpha=4, dropout=0.0).eval()
+        with torch.no_grad():
+            m.B[i].weight.normal_()
+            delta = m(x) - base(x)
+        changed = [delta[..., j * dim:(j + 1) * dim].abs().max().item() > 0 for j in range(3)]
+        ok = changed == [j == i for j in range(3)]
+        print(f"  {'OK ' if ok else 'FAIL'} adapter {name} -> slices changed {changed}")
+        assert ok
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--model_type", default="vit_l",
                     help="counts are only defined for vit_l; on a small-RAM CPU box run "
                          "identity/grads with vit_b (same block structure)")
-    ap.add_argument("--skip", nargs="*", default=[], choices=["counts", "identity", "grads", "ckpt"])
+    ap.add_argument("--skip", nargs="*", default=[], choices=["counts", "identity", "grads", "ckpt", "qkv"])
     args = ap.parse_args()
     torch.manual_seed(0)
     base = build_sam1(args.model_type, checkpoint=None)
@@ -214,4 +233,6 @@ if __name__ == "__main__":
         test_gradients(base, args.device)
     if "ckpt" not in args.skip:
         test_checkpoints(base)
+    if "qkv" not in args.skip:
+        test_fused_qkv_order()
     print("\nALL PASSED")

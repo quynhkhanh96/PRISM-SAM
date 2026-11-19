@@ -1,0 +1,4 @@
+local_paths.yaml
+__pycache__/
+*.pth
+*.parquet

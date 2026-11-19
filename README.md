@@ -15,6 +15,8 @@ tests/
 Run before any training:
 
 ```
+cp local_paths.example.yaml local_paths.yaml
+pip install pyyaml pandas pyarrow
 python tests/test_variants.py --device cuda                         # full, ViT-L
 python tests/test_variants.py --model_type vit_b --skip counts      # CPU, small RAM
 ```
