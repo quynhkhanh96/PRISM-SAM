@@ -159,7 +159,10 @@ def main():
             "test_file": os.path.abspath(args.test_file), "test_file_md5": md5(args.test_file),
             "git": git_hash(), "tau_remote": TAU_REMOTE,
             "min_component_area": MIN_COMPONENT_AREA,
-            "occlusion_min_components": OCCLUSION_MIN_COMPONENTS, "limit": args.limit}
+            "occlusion_min_components": OCCLUSION_MIN_COMPONENTS, "limit": args.limit,
+            "device_name": (torch.cuda.get_device_name() if args.device.startswith("cuda")
+                            and torch.cuda.is_available() else args.device),
+            "torch": torch.__version__, "cuda": torch.version.cuda}
     stem, agg = writer.save(out_dir, bench, meta)
     print(f"[eval_pr] saved {stem}.*")
     for k, v in agg.items():

@@ -8,6 +8,8 @@ the pre-revision eval log to rounding (logs print 5 decimals).
         --legacy_log <old_run_dir>/eval_logs_seed0.txt
 
 Exit code 0 = all metrics match; 1 = mismatch (table printed either way).
+Tolerances: 1e-5 for continuous metrics, 1e-3 for the discrete component-level
+metrics (RPR, FragmentIoU; see TOL_DISCRETE), exact for counts.
 """
 
 import argparse
@@ -21,6 +23,13 @@ import pandas as pd  # noqa: E402
 from prismsam.records import aggregate_pr, parse_legacy_log  # noqa: E402
 
 TOL = 1e-5  # 5-decimal printing => max rounding error 5e-6
+# Component-level metrics are discrete per instance (a GT component is matched
+# or not at IoU >= tau; components below 150 px are dropped). Cross-GPU
+# numerical noise (A40 vs A100, Nov 19 2026) flips a few instances: one flip of
+# a 2-component instance moves RPR by 0.5/3819 ~ 1.3e-4. Observed max 4.0e-4.
+# 1e-3 (~7 flips) is still ~3x below the seed std of these metrics (~3e-3).
+TOL_DISCRETE = 1e-3
+DISCRETE = ("RemotePartRecall", "FragmentIoU")
 
 
 def main():
@@ -45,9 +54,13 @@ def main():
         v_new = new[k]
         d = abs(v_new - v_old)
         exact = k.endswith("Count")
-        good = (d == 0) if exact else (d <= TOL)
+        tol = TOL_DISCRETE if k.startswith(DISCRETE) else TOL
+        good = (d == 0) if exact else (d <= tol)
         ok &= good
-        print(f"{k:28s} {v_old:10.5f} {v_new:10.5f} {d:10.2e} {'OK' if good else 'FAIL'}")
+        tag = "OK" if good else "FAIL"
+        if good and not exact and d > TOL:
+            tag = "OK (discrete, cross-GPU)"
+        print(f"{k:28s} {v_old:10.5f} {v_new:10.5f} {d:10.2e} {tag}")
     missing = set(new) - set(old)
     if missing:
         print(f"(not in legacy log: {sorted(missing)})")
