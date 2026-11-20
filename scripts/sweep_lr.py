@@ -1,8 +1,10 @@
 """
 R1/R5 learning-rate sweep for the control variants on the pilot seed.
 
-Protocol (decided Nov 19, 2026; see R1R5_variants_and_code_notes.md):
-  - controls only; PRISM-SAM (twt-lora) keeps its untuned lr=1e-4;
+Protocol (decided Nov 19, 2026; extended Nov 20; see R1R5_variants_and_code_notes.md):
+  - all R1 variants incl. PRISM-SAM (twt-lora) are swept (best-vs-best);
+    the twt-lora lr=1e-4 pilot run goes to '<canonical>__pilot' because the
+    canonical folder holds the re-registered pre-revision checkpoints;
   - train on few-shot seed 10, evaluate on test seed 10 (test instances, so each
     control gets its most favourable LR — conservative for our claims);
   - selection metric fixed before looking: MeanIoU/Prompt (higher better);
@@ -36,6 +38,7 @@ from prismsam import paths  # noqa: E402
 from prismsam.config import fmt_lr, resolve_config  # noqa: E402
 
 GRID = {
+    "twt-lora":    [3e-5, 1e-4, 3e-4, 1e-3],   # added Nov 20: best-vs-best comparison
     "twt-full":    [1e-5, 3e-5, 1e-4, 3e-4],
     "nontwt-full": [1e-5, 3e-5, 1e-4, 3e-4],
     "nontwt-lora": [3e-5, 1e-4, 3e-4, 1e-3],
@@ -66,6 +69,14 @@ def build_jobs(variants, results, gen_dir, dry):
         for lr in GRID[v]:
             raw = raw_config(v, lr)
             name = resolve_config(raw)["exp_name"]
+            # The canonical folder may hold re-registered pre-revision checkpoints
+            # (twt-lora lr=1e-4): never train into it; use a sibling pilot folder.
+            cfg_path = os.path.join(results, name, "config.json")
+            if os.path.exists(cfg_path):
+                with open(cfg_path) as f:
+                    if "legacy" in json.load(f):
+                        raw["exp_name"] = name + "__pilot"
+                        name = raw["exp_name"]
             ypath = os.path.join(gen_dir, f"{name}.yaml")
             if not dry:
                 os.makedirs(gen_dir, exist_ok=True)
