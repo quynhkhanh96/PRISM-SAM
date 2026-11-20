@@ -206,7 +206,9 @@ def main():
         os.makedirs(logdir, exist_ok=True)
         print(f"{len(jobs)} runs on GPUs {args.gpus}")
         run_jobs(jobs, args.gpus.split(","), results, logdir)
-    report(jobs, results, os.path.join(R, "analysis", "R1"), args.tie_eps)
+    # the table always covers the whole grid, whatever subset was run now
+    all_jobs = build_jobs(list(GRID), results, gen_dir, True)
+    report(all_jobs, results, os.path.join(R, "analysis", "R1"), args.tie_eps)
 
 
 if __name__ == "__main__":
