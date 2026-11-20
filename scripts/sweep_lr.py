@@ -38,12 +38,15 @@ from prismsam import paths  # noqa: E402
 from prismsam.config import fmt_lr, resolve_config  # noqa: E402
 
 GRID = {
-    "twt-lora":    [3e-5, 1e-4, 3e-4, 1e-3],   # added Nov 20: best-vs-best comparison
-    "twt-full":    [1e-5, 3e-5, 1e-4, 3e-4],
-    "nontwt-full": [1e-5, 3e-5, 1e-4, 3e-4],
-    "nontwt-lora": [3e-5, 1e-4, 3e-4, 1e-3],
-    "enc-lora":    [3e-5, 1e-4, 3e-4, 1e-3],
-    "tok":         [1e-4, 3e-4, 1e-3, 3e-3],
+    # Nov 20: one extra step added beyond the grid edge for every variant whose
+    # first-pass optimum sat on the edge of the grid (5 of 6).
+    "twt-lora":         [3e-5, 1e-4, 3e-4, 1e-3, 3e-3],
+    "twt-full":         [3e-6, 1e-5, 3e-5, 1e-4, 3e-4],
+    "nontwt-full":      [1e-5, 3e-5, 1e-4, 3e-4, 1e-3],
+    "nontwt-full-tok0": [3e-5, 1e-4, 3e-4, 1e-3],      # Nov 20: TWT computation untouched
+    "nontwt-lora":      [3e-5, 1e-4, 3e-4, 1e-3, 3e-3],
+    "enc-lora":         [3e-5, 1e-4, 3e-4, 1e-3, 3e-3],
+    "tok":              [1e-4, 3e-4, 1e-3, 3e-3, 1e-2],
 }
 PILOT_SEED = 10
 SELECT = "MeanIoU_per_prompt"

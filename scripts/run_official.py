@@ -37,7 +37,7 @@ import yaml  # noqa: E402
 from prismsam import paths  # noqa: E402
 from prismsam.config import fmt_lr, resolve_config  # noqa: E402
 
-VARIANTS = ["twt-lora", "twt-full", "nontwt-full", "nontwt-lora", "enc-lora", "tok"]
+VARIANTS = ["twt-lora", "twt-full", "nontwt-full", "nontwt-full-tok0", "nontwt-lora", "enc-lora", "tok"]
 MAIN_LR = 1e-4
 SEEDS = [0, 1, 2, 3, 4]
 
@@ -53,6 +53,8 @@ def main():
     ap.add_argument("--variants", nargs="*", default=VARIANTS, choices=VARIANTS)
     ap.add_argument("--seeds", default="0,1,2,3,4")
     ap.add_argument("--ce", action="store_true", help="also run click-efficiency eval")
+    ap.add_argument("--allow_edge", action="store_true",
+                    help="run even if the selected LR is at the edge of the swept grid")
     ap.add_argument("--dry_run", action="store_true")
     args = ap.parse_args()
     seeds = [int(s) for s in args.seeds.split(",")]
@@ -63,7 +65,12 @@ def main():
     if not os.path.exists(sweep):
         sys.exit(f"missing {sweep}: run scripts/sweep_lr.py first")
     with open(sweep) as f:
-        selected = json.load(f)["selected"]
+        sw = json.load(f)
+    selected = sw["selected"]
+    edges = {}
+    for r in sw["rows"]:
+        edges.setdefault(r["variant"], []).append(r["lr"])
+    edges = {v: (min(l), max(l)) for v, l in edges.items()}
 
     gen_dir = os.path.join(REPO, "configs", "generated")
     plan, jobs = [], []
@@ -71,6 +78,9 @@ def main():
         lr = selected.get(v)
         if lr is None:
             sys.exit(f"{v}: sweep incomplete or missing in {sweep} — finish the sweep first")
+        if lr in (edges.get(v) or ()) and not args.allow_edge:
+            sys.exit(f"{v}: selected lr={fmt_lr(lr)} is on the edge of its grid — extend the grid "
+                     f"in sweep_lr.py before the official runs (or pass --allow_edge)")
         if v == "twt-lora" and abs(lr - MAIN_LR) < 1e-12:
             plan.append((v, lr, "selected = main LR -> reuse re-registered seeds 0-4, nothing to train"))
             continue
