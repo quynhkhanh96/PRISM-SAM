@@ -11,7 +11,7 @@ Default experiment set = the two models with pre-revision CE results on OCH
 with --exps once trained. Idempotent: an existing ce__*.jsonl is not recomputed.
 
 Legacy CE files are looked up in `legacy_ce_dir` (local_paths.yaml, optional):
-  PRISM-SAM main -> noc_prismsam_seed{s}.jsonl, SAM1 zero-shot -> noc_sam1_seed{s}.jsonl
+  PRISM-SAM main -> noc_prismsam_seed{s}.jsonl, SAM1 zero-shot -> noc_sam1.jsonl (one file)
 """
 
 import argparse
@@ -29,7 +29,10 @@ from prismsam import paths  # noqa: E402
 
 MAIN = "och__twt-lora-scfull-qkvo-r8a8__tok1__lr1e-4__tau035-N100__steps5000"
 DEFAULT_EXPS = [MAIN, "zs__sam1", "och__dec-full__tok1__lr3e-5__tau035-N100__steps5000"]
-LEGACY_CE = {MAIN: "noc_prismsam_seed{s}.jsonl", "zs__sam1": "noc_sam1_seed{s}.jsonl"}
+# SAM1 zero-shot has a single pre-revision CE file: the protocol is deterministic
+# (clicks come from the GT) and the test instances are identical across seeds, so
+# every zs seed is checked against the same file.
+LEGACY_CE = {MAIN: "noc_prismsam_seed{s}.jsonl", "zs__sam1": "noc_sam1.jsonl"}
 
 
 def legacy_file(exp, s):
