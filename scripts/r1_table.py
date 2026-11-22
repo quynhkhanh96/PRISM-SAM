@@ -83,6 +83,35 @@ def load(results, exp, s):
     return out
 
 
+CE_DETAIL = [  # (subset, path, column name, decimals)
+    ("full", ("click1", "pct_rpr_hit_on_click1"), "c1 RPR=1 full %", 1),
+    ("occluded", ("click1", "pct_rpr_hit_on_click1"), "c1 RPR=1 occ %", 1),
+    ("full", ("click1", "pct_iou_hit_on_click1"), "c1 IoU≥.9 full %", 1),
+    ("occluded", ("click1", "pct_iou_hit_on_click1"), "c1 IoU≥.9 occ %", 1),
+    ("full", ("noc", "noc_at_rpr1", "mean"), "NoC-RPR1 (reached)", 2),
+    ("full", ("noc", "noc_at_rpr1", "pct_censored"), "NoC-RPR1 cens %", 1),
+    ("full", ("noc", "noc_at_iou_target", "mean"), "NoC@90 (reached)", 2),
+    ("full", ("noc", "noc_at_iou_target", "pct_censored"), "NoC@90 cens %", 1),
+    ("full", ("post_click1_trend", "pct_worsened_gt_1pt"), "post-c1 worsened %", 1),
+    ("full", ("post_click1_trend", "mean_delta_click1_to_last"), "post-c1 mean Δ", 3),
+]
+
+
+def load_ce_detail(results, exp, s):
+    p = os.path.join(results, exp, f"s{s}", "eval", f"ce__och-test_s{s}.summary.json")
+    if not os.path.exists(p):
+        return None
+    with open(p) as f:
+        sm = json.load(f)["summary"]
+    out = {}
+    for sub, path, name, _ in CE_DETAIL:
+        v = sm[sub]
+        for k in path:
+            v = v.get(k) if isinstance(v, dict) else None
+        out[name] = v
+    return out
+
+
 def fmt(vals, key):
     if not vals:
         return "—"
@@ -137,6 +166,25 @@ def main():
             won = int(np.sum(d > 0) if hi else np.sum(d < 0))
             dec = 5 if k == "VarIoU_per_prompt" else (1 if k.startswith("CE") else 4)
             cells.append(f"{d.mean():+.{dec}f} [{won}/{len(d)}]")
+        lines.append(f"| {label} | " + " | ".join(cells) + " |")
+
+    lines += ["", "## Click efficiency (secondary) — full test set unless marked occ", "",
+              "k_max = 5; NoC means are over reached instances only and must be read with "
+              "%censored; post-c1 = censored instances (IoU@90 never reached) with ≥2 clicks.", "",
+              "| variant | " + " | ".join(n for _, _, n, _ in CE_DETAIL) + " |",
+              "|---|" + "---|" * len(CE_DETAIL)]
+    for label, exp, *_ in spec:
+        det = [load_ce_detail(results, exp, s) for s in SEEDS]
+        det = [d for d in det if d is not None]
+        cells = []
+        for _, _, name, dec in CE_DETAIL:
+            vals = [d[name] for d in det if d.get(name) is not None]
+            if not vals:
+                cells.append("—")
+                continue
+            v = np.array(vals, dtype=float)
+            sd = v.std(ddof=1) if len(v) > 1 else float("nan")
+            cells.append(f"{v.mean():.{dec}f} ± {sd:.{dec}f}" + ("" if len(v) == len(SEEDS) else f" (n={len(v)})"))
         lines.append(f"| {label} | " + " | ".join(cells) + " |")
 
     missing = [(label, s) for label, *_ in spec for s in SEEDS
