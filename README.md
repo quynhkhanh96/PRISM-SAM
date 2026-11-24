@@ -35,3 +35,20 @@ python tests/test_variants.py --model_type vit_b --skip counts      # CPU, small
 
 Training code must give the optimizer `adapt.trainable_parameters(model)`
 (all trainable tensors), not `mask_decoder.parameters()`.
+
+## R2 — attention enrichment across adaptation sites
+
+```
+python scripts/run_r2.py --dry_run
+python scripts/run_r2.py --gpus 0,1,2 --sanity     # tok0 identity check + attention readouts
+python scripts/r2_table.py                         # -> <results_root>/analysis/R2/r2_table.md
+```
+
+- `prismsam/attention.py`: Section 1 = verbatim A_enrich_remote code from the
+  pre-revision `attention_alignment_analysis.py`; Section 2 = raw per-head
+  attention mass on remote / clicked regions for every token->image layer.
+- `scripts/eval_attn.py`: per (instance, prompt) attention file, paired with
+  the PR files on `instance_id` / `prompt_id`.
+- `scripts/r2_sanity_tok0.py`: tok0 must reproduce SAM1's TWT bit for bit.
+- `prismsam/r2.py`: experiment list + old S4.2 numbers (regression check).
+- `prismsam/bootstrap.py`: paired hierarchical bootstrap (seeds, then instances).
