@@ -97,3 +97,31 @@ class OCHumanPromptDataset(Dataset):
         if self.augment is not None:
             sample = self.augment(sample)
         return sample
+
+# ---------------------------------------------------------------- mining pool
+TRAIN_SPLIT_JSON = "ochuman_coco_format_val_range_0.00_1.00.json"   # OCHuman 'val' = our train pool
+
+
+def train_pool_records(ochuman_root):
+    """Mining pool, built exactly as in pre-revision create_benchmark.py
+    (same filtering and the same order, which the seeded shuffle relies on)."""
+    with open(os.path.join(ochuman_root, "ochuman.json"), "r") as f:
+        ochuman_all_data = json.load(f)
+    with open(os.path.join(ochuman_root, TRAIN_SPLIT_JSON), "r") as f:
+        data_train = json.load(f)
+    train_image_files = [file["file_name"] for file in data_train["images"]]
+    train_image_ids = [image_file.split(".")[0] for image_file in train_image_files]
+    train_samples = [sample for sample in ochuman_all_data["images"]
+                     if sample["image_id"] in train_image_ids]
+    train_data = []
+    for sample in train_samples:
+        for ann in sample["annotations"]:
+            if ann["segms"] is None:
+                continue
+            train_data.append({
+                "image_id": sample["image_id"],
+                "image_size": (sample["height"], sample["width"]),
+                "bbox": ann["bbox"],
+                "segms": ann["segms"],
+            })
+    return train_data

@@ -32,6 +32,14 @@ def fmt_tau(tau):
     return f"{int(round(float(tau) * 100)):03d}"   # 0.35 -> 035
 
 
+def bench_tag(b):
+    """'035' for the pre-revision criterion (area 0); '050a150' with an area filter.
+    Used in both the few-shot path (tau{tag}) and the experiment name."""
+    tag = fmt_tau(b["tau"])
+    area = int(b.get("mine_area", 0))
+    return tag + (f"a{area}" if area else "")
+
+
 def resolve_config(raw):
     """yaml/dict -> fully explicit config (what config.json stores)."""
     cfg = {"data": raw.get("data", "och"), "backbone": raw.get("backbone", "sam1"),
@@ -56,10 +64,14 @@ def resolve_config(raw):
     b = raw["benchmark"]
     cfg["benchmark"] = {"tau": float(b["tau"]), "N": int(b["N"]),
                         "fewshot": b.get("fewshot", FEWSHOT_TEMPLATE)}
+    # mining min_component_area (R3). 0 = pre-revision OCHuman criterion; the key is
+    # only stored when non-zero so configs of existing experiments stay identical.
+    if int(b.get("mine_area", 0)):
+        cfg["benchmark"]["mine_area"] = int(b["mine_area"])
 
     cfg["exp_name"] = raw.get("exp_name") or "__".join([
         cfg["data"], variant_name(cfg["adapt"]), f"lr{fmt_lr(t['lr'])}",
-        f"tau{fmt_tau(cfg['benchmark']['tau'])}-N{cfg['benchmark']['N']}",
+        f"tau{bench_tag(cfg['benchmark'])}-N{cfg['benchmark']['N']}",
         f"steps{t['total_steps']}"])
     return cfg
 
@@ -67,7 +79,7 @@ def resolve_config(raw):
 def fewshot_path(cfg, seed):
     keys = dict(paths._load())
     b = cfg["benchmark"]
-    return b["fewshot"].format(seed=seed, data=cfg["data"], tau=fmt_tau(b["tau"]), N=b["N"], **keys)
+    return b["fewshot"].format(seed=seed, data=cfg["data"], tau=bench_tag(b), N=b["N"], **keys)
 
 
 def test_path(data, test_seed):
