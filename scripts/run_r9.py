@@ -144,6 +144,8 @@ def main():
     print(f"done: {len(status) - len(bad)}/{len(status)} ok")
     for (name, s), v in sorted(bad.items()):
         print(f"  {v}: {name} s{s} (log: analysis/R9/logs/{name}__s{s}.log)")
+    if bad:
+        sys.exit(1)          # so that `run_r9.py && r9_table.py ...` stops on any failed job
 
 
 if __name__ == "__main__":
